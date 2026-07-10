@@ -22,6 +22,8 @@ const CHORD_QUALITIES = {
   dom7: { intervals: [0, 4, 7, 10],  suffix: "7" },
   min7: { intervals: [0, 3, 7, 10],  suffix: "m7" },
   m7b5: { intervals: [0, 3, 6, 10],  suffix: "m7♭5" },
+  sus4: { intervals: [0, 5, 7],      suffix: "sus4" },
+  add9: { intervals: [0, 4, 7, 14],  suffix: "add9" },
 };
 
 // ダイアトニックコード: [キーからの半音オフセット, 三和音, セブンス, 度数表記]
@@ -50,11 +52,13 @@ const DIATONIC = {
 const EXTRA_CHORDS = {
   major: [
     { root: 4, quality: "dom7", degree: "III7" }, // 丸サ進行用
-    { root: 7, quality: "maj",  degree: "V" },
+    { root: 7, quality: "sus4", degree: "Vsus4" },
+    { root: 0, quality: "add9", degree: "Iadd9" },
   ],
   minor: [
     { root: 7, quality: "maj",  degree: "V(メジャー)" },
     { root: 7, quality: "dom7", degree: "V7" },
+    { root: 0, quality: "sus4", degree: "Isus4" },
   ],
 };
 
@@ -74,10 +78,58 @@ const PRESETS = [
     chords: [{ root: 0, quality: "min" }, { root: 8, quality: "maj" }, { root: 3, quality: "maj" }, { root: 10, quality: "maj" }] },
   { name: "アンダルシア進行", desc: "情熱的でドラマチック", scale: "minor",
     chords: [{ root: 0, quality: "min" }, { root: 10, quality: "maj" }, { root: 8, quality: "maj" }, { root: 7, quality: "maj" }] },
+  { name: "ジャズ2-5-1", desc: "落ち着いた大人の響き", scale: "major",
+    chords: [{ root: 2, quality: "min7" }, { root: 7, quality: "dom7" }, { root: 0, quality: "maj7" }, { root: 0, quality: "maj7" }] },
 ];
 
 const STEPS_PER_BAR = 8; // 8分音符 × 8 = 1小節(4拍子)
 const OCTAVES = 2;       // メロディーグリッドの音域
+
+/* ---------------- 楽器・パターン定義 ---------------- */
+
+// 音色: layers = [{type, detune, gain}], env = ADSR, filter(任意)
+const INSTRUMENTS = {
+  soft:    { label: "やわらか(三角波)",   layers: [{ type: "triangle" }], env: [0.012, 0.12, 0.75, 0.14] },
+  lead:    { label: "シンセリード(鋸波)", layers: [{ type: "sawtooth" }], env: [0.008, 0.1, 0.7, 0.12], filter: 2600 },
+  chip:    { label: "ファミコン(矩形波)", layers: [{ type: "square" }], env: [0.004, 0.05, 0.85, 0.06] },
+  piano:   { label: "ピアノ風",           layers: [{ type: "triangle", gain: 1 }, { type: "sine", gain: 0.5, detune: 1200 }], env: [0.004, 0.35, 0.0, 0.18], filter: 3200 },
+  epiano:  { label: "エレピ",             layers: [{ type: "sine", gain: 1 }, { type: "sine", gain: 0.4, detune: 1900 }], env: [0.006, 0.5, 0.1, 0.25] },
+  strings: { label: "ストリングス",       layers: [{ type: "sawtooth", gain: 1 }, { type: "sawtooth", gain: 0.7, detune: 8 }], env: [0.12, 0.2, 0.85, 0.4], filter: 2200 },
+  organ:   { label: "オルガン",           layers: [{ type: "sine", gain: 1 }, { type: "sine", gain: 0.5, detune: 1200 }, { type: "sine", gain: 0.3, detune: 1900 }], env: [0.01, 0.02, 0.95, 0.1] },
+  bass:    { label: "シンセベース",       layers: [{ type: "sawtooth" }], env: [0.006, 0.08, 0.8, 0.1], filter: 900 },
+  subbass: { label: "サブベース(丸い)",   layers: [{ type: "sine" }], env: [0.01, 0.1, 0.85, 0.12] },
+  pluck:   { label: "プラック",           layers: [{ type: "triangle" }], env: [0.003, 0.16, 0.0, 0.1], filter: 2400 },
+};
+
+const MELODY_INSTRUMENTS = ["soft", "lead", "chip", "piano", "epiano", "pluck"];
+const CHORD_INSTRUMENTS   = ["strings", "epiano", "organ", "piano", "lead", "soft"];
+const BASS_INSTRUMENTS    = ["bass", "subbass", "pluck", "chip"];
+
+const CHORD_STYLES = {
+  pad:    "パッド(伸ばす)",
+  arpUp:  "アルペジオ↑",
+  arpDown:"アルペジオ↓",
+  arpUpDn:"アルペジオ↕",
+  stroke8:"8分ストローク",
+  stroke4:"4分ストローク",
+};
+
+const BASS_PATTERNS = {
+  whole:  "ルート(伸ばす)",
+  quarter:"ルート(4分)",
+  root5:  "ルート＋5度",
+  octave: "オクターブ",
+  walk:   "ウォーキング風",
+};
+
+const DRUM_PATTERNS = {
+  none:    "なし",
+  rock8:   "8ビート",
+  four:    "4つ打ち",
+  half:    "ハーフタイム",
+  shuffle: "シャッフル",
+  bossa:   "ボサノバ風",
+};
 
 /* ---------------- アプリの状態 ---------------- */
 
@@ -90,12 +142,25 @@ const state = {
   melody: {},   // { 列番号: 行番号 } 行0が最高音
   selectedBar: -1,
   activePreset: 0,
+  // サウンド設定
+  melInst: "soft",
+  chordInst: "strings",
+  bassInst: "bass",
+  chordStyle: "pad",
+  bassPattern: "root5",
+  drumPattern: "rock8",
+  harmony: false,
+  reverb: 25,
+  swing: 0,
+  volMelody: 80,
+  volChord: 60,
+  volBass: 75,
+  volDrums: 70,
 };
 
 /* ---------------- 派生値の計算 ---------------- */
 
 function scaleRows() {
-  // グリッドの行(上が高音)。MIDIノート番号のリストを返す。
   const base = 60 + state.keyRoot - (state.keyRoot >= 6 ? 12 : 0);
   const iv = SCALES[state.scale];
   const notes = [];
@@ -105,7 +170,7 @@ function scaleRows() {
       if (n <= base + OCTAVES * 12) notes.push(n);
     }
   }
-  notes.push(base + OCTAVES * 12); // 最上段のトニック
+  notes.push(base + OCTAVES * 12);
   const uniq = [...new Set(notes)].sort((a, b) => a - b);
   return uniq.reverse(); // 行0 = 最高音
 }
@@ -132,7 +197,9 @@ function degreeLabel(chord) {
   const list = DIATONIC[state.scale];
   for (const [off, tri, sev, deg] of list) {
     if (off === chord.root) {
-      return deg + (chord.quality === sev && sev !== tri ? "7" : "");
+      if (chord.quality === tri) return deg;
+      if (chord.quality === sev) return deg + "7";
+      return deg + "*";
     }
   }
   for (const ex of EXTRA_CHORDS[state.scale]) {
@@ -155,24 +222,63 @@ const chordPicker = $("chord-picker");
 const pickerBarNum = $("picker-bar-num");
 const pickerTriads = $("picker-triads");
 const pickerSevenths = $("picker-sevenths");
+const pickerClose = $("picker-close");
 const melodyGrid = $("melody-grid");
 const btnPlay = $("btn-play");
 const btnRandom = $("btn-random");
 const btnClear = $("btn-clear");
 const btnMidi = $("btn-midi");
+const btnWav = $("btn-wav");
+const btnShare = $("btn-share");
+const shareStatus = $("share-status");
 const loopCheck = $("loop-check");
+
+// サウンドUI
+const melInstSel = $("mel-inst");
+const chordInstSel = $("chord-inst");
+const bassInstSel = $("bass-inst");
+const chordStyleSel = $("chord-style");
+const bassPatternSel = $("bass-pattern");
+const drumPatternSel = $("drum-pattern");
+const harmonyCheck = $("harmony-check");
+const reverbSlider = $("reverb-slider");
+const swingSlider = $("swing-slider");
+const volMelody = $("vol-melody");
+const volChord = $("vol-chord");
+const volBass = $("vol-bass");
+const volDrums = $("vol-drums");
 
 /* ---------------- UI構築 ---------------- */
 
-function buildKeySelect() {
-  keySelect.innerHTML = "";
-  KEY_NAMES.forEach((name, i) => {
+function fillSelect(sel, entries, value) {
+  sel.innerHTML = "";
+  for (const [val, label] of entries) {
     const opt = document.createElement("option");
-    opt.value = i;
-    opt.textContent = name;
-    keySelect.appendChild(opt);
-  });
-  keySelect.value = state.keyRoot;
+    opt.value = val;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+  sel.value = value;
+}
+
+function buildKeySelect() {
+  fillSelect(keySelect, KEY_NAMES.map((n, i) => [i, n]), state.keyRoot);
+}
+
+function buildSoundSelects() {
+  fillSelect(melInstSel, MELODY_INSTRUMENTS.map(k => [k, INSTRUMENTS[k].label]), state.melInst);
+  fillSelect(chordInstSel, CHORD_INSTRUMENTS.map(k => [k, INSTRUMENTS[k].label]), state.chordInst);
+  fillSelect(bassInstSel, BASS_INSTRUMENTS.map(k => [k, INSTRUMENTS[k].label]), state.bassInst);
+  fillSelect(chordStyleSel, Object.entries(CHORD_STYLES), state.chordStyle);
+  fillSelect(bassPatternSel, Object.entries(BASS_PATTERNS), state.bassPattern);
+  fillSelect(drumPatternSel, Object.entries(DRUM_PATTERNS), state.drumPattern);
+  harmonyCheck.checked = state.harmony;
+  reverbSlider.value = state.reverb;
+  swingSlider.value = state.swing;
+  volMelody.value = state.volMelody;
+  volChord.value = state.volChord;
+  volBass.value = state.volBass;
+  volDrums.value = state.volDrums;
 }
 
 function buildPresets() {
@@ -191,18 +297,18 @@ function applyPreset(i) {
   state.activePreset = i;
   state.scale = p.scale;
   scaleSelect.value = p.scale;
+  // 8小節プリセット(カノン)は8小節へ、それ以外は現在の小節数を維持
+  if (p.chords.length > state.bars) {
+    state.bars = Math.min(16, p.chords.length);
+    barsSelect.value = String(state.bars);
+  }
   state.chords = [];
   for (let b = 0; b < state.bars; b++) {
     state.chords.push({ ...p.chords[b % p.chords.length] });
   }
-  if (p.chords.length === 8 && state.bars === 4) {
-    // カノン進行などは8小節に切り替えたほうが自然
-    state.bars = 8;
-    barsSelect.value = "8";
-    state.chords = p.chords.map(c => ({ ...c }));
-  }
   state.selectedBar = -1;
   chordPicker.classList.add("hidden");
+  buildPresets();
   renderChords();
   renderGrid();
   saveState();
@@ -227,6 +333,10 @@ function renderChords() {
   });
 }
 
+function sameChord(a, b) {
+  return a.root === b.root && a.quality === b.quality;
+}
+
 function renderPicker() {
   if (state.selectedBar < 0) {
     chordPicker.classList.add("hidden");
@@ -234,21 +344,19 @@ function renderPicker() {
   }
   chordPicker.classList.remove("hidden");
   pickerBarNum.textContent = state.selectedBar + 1;
-  const current = state.chords[state.selectedBar];
 
   const makeBtn = (chord, container) => {
+    const current = state.chords[state.selectedBar];
     const b = document.createElement("button");
     b.className = "picker-chord";
-    if (current.root === chord.root && current.quality === chord.quality) {
-      b.classList.add("current");
-    }
+    if (sameChord(current, chord)) b.classList.add("current");
     b.textContent = chordName(chord);
     b.addEventListener("click", () => {
       state.chords[state.selectedBar] = { root: chord.root, quality: chord.quality };
       state.activePreset = -1;
       buildPresets();
       renderChords();
-      renderPicker();
+      renderPicker();   // 選択状態の見た目を更新
       renderGrid();
       previewChord(state.chords[state.selectedBar]);
       saveState();
@@ -258,11 +366,15 @@ function renderPicker() {
 
   pickerTriads.innerHTML = "";
   pickerSevenths.innerHTML = "";
+  const seen = new Set();
   for (const [off, tri, sev] of DIATONIC[state.scale]) {
     makeBtn({ root: off, quality: tri }, pickerTriads);
     makeBtn({ root: off, quality: sev }, pickerSevenths);
+    seen.add(off + ":" + tri);
+    seen.add(off + ":" + sev);
   }
   for (const ex of EXTRA_CHORDS[state.scale]) {
+    if (seen.has(ex.root + ":" + ex.quality)) continue;
     makeBtn({ root: ex.root, quality: ex.quality }, pickerSevenths);
   }
 }
@@ -275,10 +387,10 @@ function renderGrid() {
   const rows = scaleRows();
   const cols = totalCols();
   melodyGrid.style.gridTemplateColumns = `64px repeat(${cols}, minmax(18px, 1fr))`;
+  melodyGrid.style.minWidth = (64 + cols * 20) + "px";
   melodyGrid.innerHTML = "";
   gridCells = [];
 
-  // 各小節のコード構成音(ピッチクラス)
   const barPcs = state.chords.map(chordPitchClasses);
   const tonicPc = state.keyRoot % 12;
 
@@ -304,7 +416,6 @@ function renderGrid() {
     }
   });
 
-  // 既存メロディーの反映(行数が変わった場合は範囲外を削除)
   for (const col of Object.keys(state.melody)) {
     const c = Number(col);
     const r = state.melody[col];
@@ -320,7 +431,6 @@ function markNote(r, c, on) {
 }
 
 function refreshNoteVisuals() {
-  // 連続音の見た目(つながって見えるように)
   const cols = totalCols();
   for (let c = 0; c < cols; c++) {
     const r = state.melody[c];
@@ -345,7 +455,7 @@ function setMelodyCell(r, c, on) {
 
 // ドラッグ入力
 let dragging = false;
-let dragMode = true; // true=追加 false=削除
+let dragMode = true;
 let lastPreviewedRow = -1;
 
 function cellFromEvent(e) {
@@ -407,7 +517,6 @@ function generateMelody() {
     const pattern = RHYTHM_PATTERNS[Math.floor(Math.random() * RHYTHM_PATTERNS.length)];
     pattern.forEach((step, idx) => {
       const col = bar * STEPS_PER_BAR + step;
-      // 強拍(小節頭・3拍目)はコードトーン、それ以外は近い音を選ぶ
       const strong = step === 0 || step === 4;
       const candidates = [];
       for (let r = 0; r < rows.length; r++) {
@@ -415,7 +524,6 @@ function generateMelody() {
         if (dist > (idx === 0 ? 5 : 3)) continue;
         const isChordTone = pcs.includes(rows[r] % 12);
         if (strong && !isChordTone) continue;
-        // 近い音ほど選ばれやすく、コードトーンを優遇
         let weight = 10 - dist * 2 + (isChordTone ? 4 : 0);
         if (weight > 0) candidates.push({ r, weight });
       }
@@ -433,107 +541,257 @@ function generateMelody() {
   saveState();
 }
 
-/* ---------------- 再生(Web Audio) ---------------- */
-
-let audioCtx = null;
-let masterGain = null;
-let playing = false;
-let scheduledNodes = [];
-let loopTimer = null;
-let playStartTime = 0;
-let rafId = null;
-
-function ensureAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const comp = audioCtx.createDynamicsCompressor();
-    comp.threshold.value = -18;
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.9;
-    masterGain.connect(comp);
-    comp.connect(audioCtx.destination);
-  }
-  if (audioCtx.state === "suspended") audioCtx.resume();
-}
+/* ================================================================
+ * オーディオエンジン(ライブ再生 & オフライン書き出しで共用)
+ * ================================================================ */
 
 function midiToFreq(m) {
   return 440 * Math.pow(2, (m - 69) / 12);
 }
 
-function playTone({ midi, time, dur, type = "triangle", gain = 0.2, filterFreq = 0 }) {
-  const osc = audioCtx.createOscillator();
-  osc.type = type;
-  osc.frequency.value = midiToFreq(midi);
-  const g = audioCtx.createGain();
-  const attack = 0.015;
-  const release = 0.08;
-  g.gain.setValueAtTime(0, time);
-  g.gain.linearRampToValueAtTime(gain, time + attack);
-  g.gain.setValueAtTime(gain, Math.max(time + attack, time + dur - release));
-  g.gain.linearRampToValueAtTime(0.0001, time + dur);
-  let node = osc;
-  if (filterFreq > 0) {
-    const f = audioCtx.createBiquadFilter();
-    f.type = "lowpass";
-    f.frequency.value = filterFreq;
-    osc.connect(f);
-    node = f;
+// リバーブ用インパルス応答を生成
+function makeImpulse(ctx, seconds, decay) {
+  const rate = ctx.sampleRate;
+  const len = Math.max(1, Math.floor(rate * seconds));
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
   }
-  node.connect(g);
-  g.connect(masterGain);
-  osc.start(time);
-  osc.stop(time + dur + 0.05);
-  scheduledNodes.push(osc);
+  return buf;
+}
+
+// 出力グラフ(voiceをここのbusに接続する)
+function makeGraph(ctx, reverbAmount) {
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -16;
+  comp.ratio.value = 3;
+  comp.connect(ctx.destination);
+
+  const master = ctx.createGain();
+  master.gain.value = 0.9;
+  master.connect(comp);
+
+  const bus = ctx.createGain();
+  bus.connect(master);
+
+  const wet = ctx.createGain();
+  wet.gain.value = Math.min(0.9, reverbAmount / 100);
+  const conv = ctx.createConvolver();
+  conv.buffer = makeImpulse(ctx, 2.2, 3.0);
+  bus.connect(conv);
+  conv.connect(wet);
+  wet.connect(master);
+
+  return bus;
+}
+
+// 1音を鳴らす
+function playNote(ctx, bus, { inst, midi, time, dur, gain }) {
+  const def = INSTRUMENTS[inst] || INSTRUMENTS.soft;
+  const [a, d, s, r] = def.env;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, time);
+  env.gain.linearRampToValueAtTime(gain, time + a);
+  const susLevel = Math.max(0.0001, gain * s);
+  env.gain.linearRampToValueAtTime(susLevel, time + a + d);
+  const relStart = Math.max(time + a + d, time + dur);
+  env.gain.setValueAtTime(Math.max(0.0001, env.gain.value || susLevel), relStart);
+  env.gain.setTargetAtTime(0.0001, relStart, r / 3 + 0.01);
+
+  let dest = env;
+  if (def.filter) {
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = def.filter;
+    f.connect(env);
+    dest = f;
+  }
+  env.connect(bus);
+
+  const freq = midiToFreq(midi);
+  const stopAt = time + dur + r + 0.05;
+  const oscs = [];
+  for (const layer of def.layers) {
+    const osc = ctx.createOscillator();
+    osc.type = layer.type;
+    osc.frequency.value = freq;
+    if (layer.detune) osc.detune.value = layer.detune;
+    const lg = ctx.createGain();
+    lg.gain.value = layer.gain === undefined ? 1 : layer.gain;
+    osc.connect(lg);
+    lg.connect(dest);
+    osc.start(time);
+    osc.stop(stopAt);
+    oscs.push(osc);
+  }
+  return oscs;
+}
+
+// ドラム(ノイズ/サイン)
+function drumHit(ctx, bus, type, time, gain) {
+  if (type === "kick") {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.setValueAtTime(150, time);
+    osc.frequency.exponentialRampToValueAtTime(48, time + 0.12);
+    g.gain.setValueAtTime(gain, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+    osc.connect(g); g.connect(bus);
+    osc.start(time); osc.stop(time + 0.2);
+    return;
+  }
+  // ノイズ系(snare/hat)
+  const dur = type === "snare" ? 0.18 : 0.05;
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const filt = ctx.createBiquadFilter();
+  filt.type = "highpass";
+  filt.frequency.value = type === "snare" ? 1200 : 7000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+  src.connect(filt); filt.connect(g); g.connect(bus);
+  if (type === "snare") {
+    const tone = ctx.createOscillator();
+    tone.frequency.value = 190;
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(gain * 0.4, time);
+    tg.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    tone.connect(tg); tg.connect(bus);
+    tone.start(time); tone.stop(time + dur);
+  }
+  src.start(time); src.stop(time + dur);
 }
 
 function chordMidiNotes(chord) {
-  // オクターブ3〜4あたりにボイシング
   const rootPc = (state.keyRoot + chord.root) % 12;
   let root = 48 + rootPc;
   if (root > 55) root -= 12;
   return CHORD_QUALITIES[chord.quality].intervals.map(i => root + i);
 }
 
-function scheduleSong(startTime) {
+function bassRootMidi(chord) {
+  return 36 + ((state.keyRoot + chord.root) % 12);
+}
+
+// スウィング適用済みの時刻を返す
+function swungOffset(stepInBar, stepDur) {
+  if (state.swing <= 0) return 0;
+  return (stepInBar % 2 === 1) ? stepDur * (state.swing / 100) * 0.33 : 0;
+}
+
+// ドラムパターン: [step(0-7)] -> 楽器
+const DRUM_MAPS = {
+  rock8:   { kick: [0, 4], snare: [2, 6], hat: [0, 1, 2, 3, 4, 5, 6, 7] },
+  four:    { kick: [0, 2, 4, 6], snare: [2, 6], hat: [1, 3, 5, 7] },
+  half:    { kick: [0], snare: [4], hat: [0, 2, 4, 6] },
+  shuffle: { kick: [0, 4], snare: [2, 6], hat: [0, 1, 3, 4, 5, 7] },
+  bossa:   { kick: [0, 3, 4, 7], snare: [2, 6], hat: [0, 1, 2, 3, 4, 5, 6, 7] },
+};
+
+// 全パートをスケジュール(ライブ/オフライン共通)
+function scheduleSong(ctx, bus, startTime) {
   const beat = 60 / state.tempo;
   const stepDur = beat / 2;
   const barDur = beat * 4;
   const rows = scaleRows();
+  const vMel = state.volMelody / 100;
+  const vCho = state.volChord / 100;
+  const vBas = state.volBass / 100;
+  const vDrm = state.volDrums / 100;
 
   state.chords.forEach((chord, bar) => {
     const t = startTime + bar * barDur;
-    // コード(パッド)
-    for (const m of chordMidiNotes(chord)) {
-      playTone({ midi: m, time: t, dur: barDur * 0.98, type: "sawtooth", gain: 0.045, filterFreq: 900 });
+    const notes = chordMidiNotes(chord);
+
+    // --- コード ---
+    if (vCho > 0) {
+      const style = state.chordStyle;
+      if (style === "pad") {
+        for (const m of notes) {
+          playNote(ctx, bus, { inst: state.chordInst, midi: m, time: t, dur: barDur * 0.98, gain: 0.09 * vCho });
+        }
+      } else if (style === "stroke8" || style === "stroke4") {
+        const div = style === "stroke8" ? 8 : 4;
+        const sd = barDur / div;
+        for (let k = 0; k < div; k++) {
+          const stepInBar = style === "stroke8" ? k : k * 2;
+          const st = t + k * sd + swungOffset(stepInBar, stepDur);
+          for (const m of notes) {
+            playNote(ctx, bus, { inst: state.chordInst, midi: m, time: st, dur: sd * 0.9, gain: 0.08 * vCho });
+          }
+        }
+      } else {
+        // アルペジオ
+        let seq = [...notes];
+        if (style === "arpDown") seq.reverse();
+        if (style === "arpUpDn") seq = notes.concat([...notes].reverse().slice(1, -1));
+        const steps = STEPS_PER_BAR;
+        for (let k = 0; k < steps; k++) {
+          const m = seq[k % seq.length] + (Math.floor(k / seq.length) % 2 === 1 ? 12 : 0);
+          const st = t + k * stepDur + swungOffset(k, stepDur);
+          playNote(ctx, bus, { inst: state.chordInst, midi: m, time: st, dur: stepDur * 1.4, gain: 0.1 * vCho });
+        }
+      }
     }
-    // ベース(1拍目と3拍目)
-    const rootPc = (state.keyRoot + chord.root) % 12;
-    const bassMidi = 36 + rootPc;
-    playTone({ midi: bassMidi, time: t, dur: beat * 1.8, type: "sine", gain: 0.28 });
-    playTone({ midi: bassMidi, time: t + beat * 2, dur: beat * 1.8, type: "sine", gain: 0.22 });
+
+    // --- ベース ---
+    if (vBas > 0) {
+      const rootM = bassRootMidi(chord);
+      const fifth = rootM + 7;
+      const pat = state.bassPattern;
+      const emit = (m, off, len, g) =>
+        playNote(ctx, bus, { inst: state.bassInst, midi: m, time: t + off + swungOffset(Math.round(off / stepDur), stepDur), dur: len, gain: g * vBas });
+      if (pat === "whole") {
+        emit(rootM, 0, barDur * 0.95, 0.3);
+      } else if (pat === "quarter") {
+        for (let k = 0; k < 4; k++) emit(rootM, k * beat, beat * 0.8, 0.28);
+      } else if (pat === "root5") {
+        emit(rootM, 0, beat * 1.8, 0.3);
+        emit(fifth, beat * 2, beat * 1.8, 0.24);
+      } else if (pat === "octave") {
+        for (let k = 0; k < 4; k++) emit(k % 2 === 0 ? rootM : rootM + 12, k * beat, beat * 0.7, 0.27);
+      } else if (pat === "walk") {
+        const nextChord = state.chords[(bar + 1) % state.chords.length];
+        const target = bassRootMidi(nextChord);
+        const dir = target >= rootM ? 1 : -1;
+        const seq = [rootM, rootM + (CHORD_QUALITIES[chord.quality].intervals[1] || 4), fifth, rootM + dir * 5];
+        for (let k = 0; k < 4; k++) emit(seq[k], k * beat, beat * 0.8, 0.26);
+      }
+    }
+
+    // --- ドラム ---
+    if (vDrm > 0 && state.drumPattern !== "none") {
+      const map = DRUM_MAPS[state.drumPattern] || DRUM_MAPS.rock8;
+      for (const step of map.kick)  drumHit(ctx, bus, "kick",  t + step * stepDur + swungOffset(step, stepDur), 0.9 * vDrm);
+      for (const step of map.snare) drumHit(ctx, bus, "snare", t + step * stepDur + swungOffset(step, stepDur), 0.5 * vDrm);
+      for (const step of map.hat)   drumHit(ctx, bus, "hat",   t + step * stepDur + swungOffset(step, stepDur), 0.28 * vDrm);
+    }
   });
 
-  // メロディー(同じ行が連続していたらつなげて1音に)
-  const cols = totalCols();
-  for (let c = 0; c < cols; c++) {
-    const r = state.melody[c];
-    if (r === undefined || state.melody[c - 1] === r) continue;
-    let len = 1;
-    while (state.melody[c + len] === r) len++;
-    playTone({
-      midi: rows[r],
-      time: startTime + c * stepDur,
-      dur: stepDur * len * 0.95,
-      type: "triangle",
-      gain: 0.3,
-    });
-    playTone({
-      midi: rows[r] + 12,
-      time: startTime + c * stepDur,
-      dur: stepDur * len * 0.95,
-      type: "sine",
-      gain: 0.06,
-    });
+  // --- メロディー ---
+  if (vMel > 0) {
+    const cols = totalCols();
+    for (let c = 0; c < cols; c++) {
+      const r = state.melody[c];
+      if (r === undefined || state.melody[c - 1] === r) continue;
+      let len = 1;
+      while (state.melody[c + len] === r) len++;
+      const stepInBar = c % STEPS_PER_BAR;
+      const noteTime = startTime + c * stepDur + swungOffset(stepInBar, stepDur);
+      const noteDur = stepDur * len * 0.95;
+      playNote(ctx, bus, { inst: state.melInst, midi: rows[r], time: noteTime, dur: noteDur, gain: 0.32 * vMel });
+      // ハモリ(スケール上で3度下)
+      if (state.harmony && rows[r + 2] !== undefined) {
+        playNote(ctx, bus, { inst: state.melInst, midi: rows[r + 2], time: noteTime, dur: noteDur, gain: 0.16 * vMel });
+      }
+    }
   }
 }
 
@@ -541,14 +799,36 @@ function songDuration() {
   return (60 / state.tempo) * 4 * state.bars;
 }
 
+/* ---------------- ライブ再生 ---------------- */
+
+let audioCtx = null;
+let liveBus = null;
+let liveReverb = -1;
+let playing = false;
+let loopTimer = null;
+let playStartTime = 0;
+let rafId = null;
+let lastPlayCol = -1;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (!liveBus || liveReverb !== state.reverb) {
+    liveBus = makeGraph(audioCtx, state.reverb);
+    liveReverb = state.reverb;
+  }
+}
+
 function startPlayback() {
-  ensureAudio();
   stopPlayback(false);
+  ensureAudio();
   playing = true;
   btnPlay.textContent = "■ 停止";
-  const start = audioCtx.currentTime + 0.08;
+  const start = audioCtx.currentTime + 0.1;
   playStartTime = start;
-  scheduleSong(start);
+  scheduleSong(audioCtx, liveBus, start);
   armLoop(start);
   rafId = requestAnimationFrame(updatePlayhead);
 }
@@ -560,27 +840,27 @@ function armLoop(passStart) {
     if (loopCheck.checked) {
       const next = passStart + dur;
       playStartTime = next;
-      scheduleSong(next);
+      scheduleSong(audioCtx, liveBus, next);
       armLoop(next);
     } else {
       stopPlayback(true);
     }
-  }, Math.max(0, (passStart + dur - audioCtx.currentTime - 0.15) * 1000));
+  }, Math.max(0, (passStart + dur - audioCtx.currentTime - 0.2) * 1000));
 }
 
 function stopPlayback(updateButton = true) {
   playing = false;
   if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-  for (const n of scheduledNodes) {
-    try { n.stop(); } catch (_) { /* already stopped */ }
+  if (audioCtx && liveBus) {
+    // 発音中の音を素早くフェードアウト(新しいbusに差し替え)
+    try { liveBus.gain.setTargetAtTime(0, audioCtx.currentTime, 0.02); } catch (_) {}
+    liveBus = null;
+    liveReverb = -1;
   }
-  scheduledNodes = [];
   clearPlayhead();
   if (updateButton) btnPlay.textContent = "▶ 再生";
 }
-
-let lastPlayCol = -1;
 
 function updatePlayhead() {
   if (!playing) return;
@@ -612,15 +892,84 @@ function clearPlayhead() {
 
 function previewNote(midi) {
   ensureAudio();
-  playTone({ midi, time: audioCtx.currentTime, dur: 0.25, type: "triangle", gain: 0.25 });
+  playNote(audioCtx, liveBus, { inst: state.melInst, midi, time: audioCtx.currentTime, dur: 0.28, gain: 0.28 });
 }
 
 function previewChord(chord) {
   ensureAudio();
   const t = audioCtx.currentTime;
   for (const m of chordMidiNotes(chord)) {
-    playTone({ midi: m, time: t, dur: 0.7, type: "sawtooth", gain: 0.05, filterFreq: 900 });
+    playNote(audioCtx, liveBus, { inst: state.chordInst, midi: m, time: t, dur: 0.8, gain: 0.09 });
   }
+}
+
+/* ---------------- WAV書き出し(OfflineAudioContext) ---------------- */
+
+async function exportWav() {
+  btnWav.disabled = true;
+  btnWav.textContent = "書き出し中…";
+  try {
+    const tail = 2.5; // リバーブの残響
+    const dur = songDuration() + tail;
+    const rate = 44100;
+    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const octx = new OfflineCtx(2, Math.ceil(rate * dur), rate);
+    const bus = makeGraph(octx, state.reverb);
+    scheduleSong(octx, bus, 0.05);
+    const buffer = await octx.startRendering();
+    const blob = encodeWav(buffer);
+    downloadBlob(blob, `musica-${KEY_NAMES[state.keyRoot]}-${state.scale}.wav`);
+  } catch (e) {
+    alert("WAVの書き出しに失敗しました: " + e.message);
+  } finally {
+    btnWav.disabled = false;
+    btnWav.textContent = "🎧 WAVで保存";
+  }
+}
+
+function encodeWav(buffer) {
+  const numCh = buffer.numberOfChannels;
+  const len = buffer.length;
+  const rate = buffer.sampleRate;
+  const bytesPerSample = 2;
+  const dataSize = len * numCh * bytesPerSample;
+  const ab = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(ab);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * numCh * bytesPerSample, true);
+  view.setUint16(32, numCh * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const chans = [];
+  for (let ch = 0; ch < numCh; ch++) chans.push(buffer.getChannelData(ch));
+  let off = 44;
+  for (let i = 0; i < len; i++) {
+    for (let ch = 0; ch < numCh; ch++) {
+      let s = Math.max(-1, Math.min(1, chans[ch][i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      off += 2;
+    }
+  }
+  return new Blob([ab], { type: "audio/wav" });
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 /* ---------------- MIDI書き出し ---------------- */
@@ -645,29 +994,25 @@ function exportMidi() {
   const stepTicks = TPQ / 2;
   const barTicks = TPQ * 4;
   const rows = scaleRows();
-  const events = []; // {tick, data:[...]}
-
+  const events = [];
   const add = (tick, data) => events.push({ tick, data });
 
-  // テンポ
   const usPerBeat = Math.round(60000000 / state.tempo);
   add(0, [0xff, 0x51, 0x03, (usPerBeat >> 16) & 0xff, (usPerBeat >> 8) & 0xff, usPerBeat & 0xff]);
 
-  // コード(ch1) & ベース(ch2)
   state.chords.forEach((chord, bar) => {
     const t = bar * barTicks;
     for (const m of chordMidiNotes(chord)) {
       add(t, [0x91, m, 60]);
       add(t + barTicks - 10, [0x81, m, 0]);
     }
-    const bass = 36 + ((state.keyRoot + chord.root) % 12);
+    const bass = bassRootMidi(chord);
     add(t, [0x92, bass, 90]);
     add(t + TPQ * 2 - 10, [0x82, bass, 0]);
     add(t + TPQ * 2, [0x92, bass, 80]);
     add(t + TPQ * 4 - 10, [0x82, bass, 0]);
   });
 
-  // メロディー(ch0)
   const cols = totalCols();
   for (let c = 0; c < cols; c++) {
     const r = state.melody[c];
@@ -676,10 +1021,13 @@ function exportMidi() {
     while (state.melody[c + len] === r) len++;
     add(c * stepTicks, [0x90, rows[r], 100]);
     add((c + len) * stepTicks - 5, [0x80, rows[r], 0]);
+    if (state.harmony && rows[r + 2] !== undefined) {
+      add(c * stepTicks, [0x90, rows[r + 2], 70]);
+      add((c + len) * stepTicks - 5, [0x80, rows[r + 2], 0]);
+    }
   }
 
-  add(state.bars * barTicks, [0xff, 0x2f, 0x00]); // トラック終端
-
+  add(state.bars * barTicks, [0xff, 0x2f, 0x00]);
   events.sort((a, b) => a.tick - b.tick);
 
   const trackBytes = [];
@@ -689,63 +1037,116 @@ function exportMidi() {
     lastTick = ev.tick;
   }
 
-  const header = [
-    0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, // MThd
-    0, 0,                               // format 0
-    0, 1,                               // 1トラック
-    (TPQ >> 8) & 0xff, TPQ & 0xff,
-  ];
+  const header = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, (TPQ >> 8) & 0xff, TPQ & 0xff];
   const len = trackBytes.length;
-  const trackHeader = [
-    0x4d, 0x54, 0x72, 0x6b, // MTrk
-    (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff,
-  ];
-
+  const trackHeader = [0x4d, 0x54, 0x72, 0x6b, (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff];
   const blob = new Blob([new Uint8Array([...header, ...trackHeader, ...trackBytes])], { type: "audio/midi" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `musica-${KEY_NAMES[state.keyRoot]}-${state.scale}.mid`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadBlob(blob, `musica-${KEY_NAMES[state.keyRoot]}-${state.scale}.mid`);
+}
+
+/* ---------------- 共有リンク ---------------- */
+
+function snapshot() {
+  return {
+    keyRoot: state.keyRoot, scale: state.scale, tempo: state.tempo, bars: state.bars,
+    chords: state.chords, melody: state.melody, activePreset: state.activePreset,
+    melInst: state.melInst, chordInst: state.chordInst, bassInst: state.bassInst,
+    chordStyle: state.chordStyle, bassPattern: state.bassPattern, drumPattern: state.drumPattern,
+    harmony: state.harmony, reverb: state.reverb, swing: state.swing,
+    volMelody: state.volMelody, volChord: state.volChord, volBass: state.volBass, volDrums: state.volDrums,
+  };
+}
+
+function encodeShare() {
+  const json = JSON.stringify(snapshot());
+  return btoa(unescape(encodeURIComponent(json)));
+}
+
+function shareLink() {
+  const url = location.origin + location.pathname + "#s=" + encodeShare();
+  const done = () => { shareStatus.textContent = "共有リンクをクリップボードにコピーしました ✔"; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => {
+      shareStatus.textContent = "リンク: " + url;
+    });
+  } else {
+    shareStatus.textContent = "リンク: " + url;
+  }
+  history.replaceState(null, "", "#s=" + encodeShare());
+}
+
+function tryLoadFromHash() {
+  const m = location.hash.match(/s=([^&]+)/);
+  if (!m) return false;
+  try {
+    const json = decodeURIComponent(escape(atob(m[1])));
+    return applySnapshot(JSON.parse(json));
+  } catch (_) {
+    return false;
+  }
 }
 
 /* ---------------- 保存と復元 ---------------- */
 
-const STORAGE_KEY = "musica-song-v1";
+const STORAGE_KEY = "musica-song-v2";
 
 function saveState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      keyRoot: state.keyRoot,
-      scale: state.scale,
-      tempo: state.tempo,
-      bars: state.bars,
-      chords: state.chords,
-      melody: state.melody,
-      activePreset: state.activePreset,
-    }));
-  } catch (_) { /* プライベートモードなどでは保存しない */ }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot()));
+  } catch (_) {}
+}
+
+function applySnapshot(data) {
+  if (!data || !Array.isArray(data.chords) || data.chords.length === 0) return false;
+  const has = (obj, k, v) => (obj[k] !== undefined ? obj[k] : v);
+  state.keyRoot = has(data, "keyRoot", 0);
+  state.scale = SCALES[data.scale] ? data.scale : "major";
+  state.tempo = Math.min(240, Math.max(40, has(data, "tempo", 120)));
+  state.bars = [4, 8, 12, 16].includes(data.bars) ? data.bars : 4;
+  state.chords = data.chords.map(c => ({ root: c.root, quality: CHORD_QUALITIES[c.quality] ? c.quality : "maj" }));
+  state.melody = data.melody || {};
+  state.activePreset = has(data, "activePreset", -1);
+  state.melInst = INSTRUMENTS[data.melInst] ? data.melInst : "soft";
+  state.chordInst = INSTRUMENTS[data.chordInst] ? data.chordInst : "strings";
+  state.bassInst = INSTRUMENTS[data.bassInst] ? data.bassInst : "bass";
+  state.chordStyle = CHORD_STYLES[data.chordStyle] ? data.chordStyle : "pad";
+  state.bassPattern = BASS_PATTERNS[data.bassPattern] ? data.bassPattern : "root5";
+  state.drumPattern = DRUM_PATTERNS[data.drumPattern] ? data.drumPattern : "rock8";
+  state.harmony = !!data.harmony;
+  state.reverb = has(data, "reverb", 25);
+  state.swing = has(data, "swing", 0);
+  state.volMelody = has(data, "volMelody", 80);
+  state.volChord = has(data, "volChord", 60);
+  state.volBass = has(data, "volBass", 75);
+  state.volDrums = has(data, "volDrums", 70);
+  return true;
 }
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return false;
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data.chords) || data.chords.length === 0) return false;
-    Object.assign(state, {
-      keyRoot: data.keyRoot ?? 0,
-      scale: SCALES[data.scale] ? data.scale : "major",
-      tempo: data.tempo ?? 120,
-      bars: data.bars === 8 ? 8 : 4,
-      chords: data.chords,
-      melody: data.melody ?? {},
-      activePreset: data.activePreset ?? -1,
-    });
-    return true;
+    return applySnapshot(JSON.parse(raw));
   } catch (_) {
     return false;
   }
+}
+
+/* ---------------- スケール変更時のコード再マッピング ---------------- */
+
+function remapChordsToScale(oldScale, newScale) {
+  const oldD = DIATONIC[oldScale];
+  const newD = DIATONIC[newScale];
+  state.chords = state.chords.map(chord => {
+    const idx = oldD.findIndex(([off]) => off === chord.root);
+    if (idx < 0) return { ...chord }; // ダイアトニック外はそのまま
+    const [, oldTri, oldSev] = oldD[idx];
+    const [newOff, newTri, newSev] = newD[idx];
+    let quality = chord.quality;
+    if (chord.quality === oldTri) quality = newTri;
+    else if (chord.quality === oldSev) quality = newSev;
+    return { root: newOff, quality };
+  });
 }
 
 /* ---------------- イベント ---------------- */
@@ -760,18 +1161,25 @@ keySelect.addEventListener("change", () => {
 });
 
 scaleSelect.addEventListener("change", () => {
-  state.scale = scaleSelect.value;
+  const oldScale = state.scale;
+  const newScale = scaleSelect.value;
+  if (newScale === oldScale) return;
   stopPlayback();
-  // スケールに合うプリセットへ切り替え
-  const idx = PRESETS.findIndex(p => p.scale === state.scale);
-  applyPreset(idx >= 0 ? idx : 0);
+  // プリセットに頼らず、今のコード進行をそのまま新しいスケールへ移調
+  remapChordsToScale(oldScale, newScale);
+  state.scale = newScale;
+  state.activePreset = -1;
+  buildPresets();
+  renderChords();
+  renderPicker();
+  renderGrid();
+  saveState();
 });
 
 barsSelect.addEventListener("change", () => {
   const newBars = Number(barsSelect.value);
   stopPlayback();
   if (newBars > state.bars) {
-    // 既存の進行を繰り返して拡張
     const old = state.chords.map(c => ({ ...c }));
     while (state.chords.length < newBars) {
       state.chords.push({ ...old[state.chords.length % old.length] });
@@ -793,25 +1201,43 @@ tempoSlider.addEventListener("input", () => {
   saveState();
 });
 
+pickerClose.addEventListener("click", () => {
+  state.selectedBar = -1;
+  renderChords();
+  renderPicker();
+});
+
 btnPlay.addEventListener("click", () => {
   if (playing) stopPlayback();
   else startPlayback();
 });
-
-btnRandom.addEventListener("click", () => {
-  generateMelody();
-});
-
+btnRandom.addEventListener("click", generateMelody);
 btnClear.addEventListener("click", () => {
   state.melody = {};
   renderGrid();
   saveState();
 });
-
 btnMidi.addEventListener("click", exportMidi);
+btnWav.addEventListener("click", exportWav);
+btnShare.addEventListener("click", shareLink);
+
+// サウンド設定
+melInstSel.addEventListener("change", () => { state.melInst = melInstSel.value; saveState(); });
+chordInstSel.addEventListener("change", () => { state.chordInst = chordInstSel.value; saveState(); });
+bassInstSel.addEventListener("change", () => { state.bassInst = bassInstSel.value; saveState(); });
+chordStyleSel.addEventListener("change", () => { state.chordStyle = chordStyleSel.value; saveState(); });
+bassPatternSel.addEventListener("change", () => { state.bassPattern = bassPatternSel.value; saveState(); });
+drumPatternSel.addEventListener("change", () => { state.drumPattern = drumPatternSel.value; saveState(); });
+harmonyCheck.addEventListener("change", () => { state.harmony = harmonyCheck.checked; saveState(); });
+reverbSlider.addEventListener("input", () => { state.reverb = Number(reverbSlider.value); saveState(); });
+swingSlider.addEventListener("input", () => { state.swing = Number(swingSlider.value); saveState(); });
+volMelody.addEventListener("input", () => { state.volMelody = Number(volMelody.value); saveState(); });
+volChord.addEventListener("input", () => { state.volChord = Number(volChord.value); saveState(); });
+volBass.addEventListener("input", () => { state.volBass = Number(volBass.value); saveState(); });
+volDrums.addEventListener("input", () => { state.volDrums = Number(volDrums.value); saveState(); });
 
 document.addEventListener("keydown", e => {
-  if (e.code === "Space" && !["SELECT", "INPUT", "BUTTON"].includes(document.activeElement.tagName)) {
+  if (e.code === "Space" && !["SELECT", "INPUT", "BUTTON", "TEXTAREA"].includes(document.activeElement.tagName)) {
     e.preventDefault();
     if (playing) stopPlayback();
     else startPlayback();
@@ -821,8 +1247,10 @@ document.addEventListener("keydown", e => {
 /* ---------------- 初期化 ---------------- */
 
 buildKeySelect();
-const restored = loadState();
+const fromHash = tryLoadFromHash();
+const restored = fromHash || loadState();
 buildPresets();
+buildSoundSelects();
 keySelect.value = state.keyRoot;
 scaleSelect.value = state.scale;
 barsSelect.value = String(state.bars);

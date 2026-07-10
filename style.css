@@ -172,10 +172,14 @@ select {
 }
 
 /* ---- chord bar row ---- */
+.chord-bar-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
 .chord-bar-row {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  grid-auto-columns: minmax(78px, 1fr);
   gap: 6px;
 }
 .chord-cell {
@@ -214,11 +218,25 @@ select {
   border-radius: 10px;
 }
 .chord-picker.hidden { display: none; }
+.picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 .picker-title {
   margin: 0 0 8px;
   font-size: 0.85rem;
   color: var(--text-dim);
 }
+.picker-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px 6px;
+}
+.picker-close:hover { color: var(--text); }
 .picker-row {
   display: flex;
   flex-wrap: wrap;
@@ -290,7 +308,52 @@ select {
 .grid-cell.play-col.chord-tone:not(.note-on) { background: var(--play-col); }
 .grid-cell.note-on.play-col { filter: brightness(1.3); }
 
-.transport .controls-row { align-items: center; }
+/* ---- sound customization ---- */
+.sound-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.sound-block {
+  background: #171a26;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sound-block h3 {
+  margin: 0 0 2px;
+  font-size: 0.92rem;
+}
+.sound-block label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.sound-block label.checkline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.sound-block label.checkline input { accent-color: var(--accent); }
+.sound-block select {
+  font-size: 0.88rem;
+  padding: 6px 8px;
+}
+.sound-block input[type="range"] { width: 100%; }
+
+.transport .controls-row { align-items: center; flex-wrap: wrap; }
+.share-status {
+  margin: 10px 0 0;
+  min-height: 1.2em;
+  color: var(--accent);
+}
 
 .app-footer {
   text-align: center;

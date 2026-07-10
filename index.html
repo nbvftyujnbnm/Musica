@@ -30,10 +30,12 @@
         <select id="bars-select">
           <option value="4">4小節</option>
           <option value="8">8小節</option>
+          <option value="12">12小節</option>
+          <option value="16">16小節</option>
         </select>
       </label>
       <label class="tempo-label">テンポ <span id="tempo-value">120</span> BPM
-        <input type="range" id="tempo-slider" min="60" max="180" value="120">
+        <input type="range" id="tempo-slider" min="40" max="240" value="120">
       </label>
     </div>
   </section>
@@ -43,9 +45,14 @@
     <h2><span class="step-num">2</span> コード進行を選ぶ</h2>
     <p class="hint">プリセットをタップするか、下の小節をクリックして1つずつ選べます。</p>
     <div id="preset-list" class="preset-list"></div>
-    <div id="chord-bar-row" class="chord-bar-row"></div>
+    <div class="chord-bar-scroll">
+      <div id="chord-bar-row" class="chord-bar-row"></div>
+    </div>
     <div id="chord-picker" class="chord-picker hidden">
-      <p class="picker-title">小節 <span id="picker-bar-num"></span> のコードを選択</p>
+      <div class="picker-head">
+        <p class="picker-title">小節 <span id="picker-bar-num"></span> のコードを選択</p>
+        <button id="picker-close" class="picker-close" title="閉じる">✕</button>
+      </div>
       <div id="picker-triads" class="picker-row"></div>
       <div id="picker-sevenths" class="picker-row"></div>
     </div>
@@ -64,14 +71,76 @@
     </div>
   </section>
 
-  <!-- STEP 4: 再生 -->
+  <!-- STEP 4: サウンド -->
+  <section class="panel" id="panel-sound">
+    <h2><span class="step-num">4</span> サウンドをカスタム</h2>
+    <div class="sound-grid">
+      <div class="sound-block">
+        <h3>🎤 メロディー</h3>
+        <label>音色
+          <select id="mel-inst"></select>
+        </label>
+        <label class="checkline"><input type="checkbox" id="harmony-check"> 3度下のハモリを重ねる</label>
+        <label>音量
+          <input type="range" id="vol-melody" min="0" max="100" value="80">
+        </label>
+      </div>
+      <div class="sound-block">
+        <h3>🎹 コード</h3>
+        <label>音色
+          <select id="chord-inst"></select>
+        </label>
+        <label>スタイル
+          <select id="chord-style"></select>
+        </label>
+        <label>音量
+          <input type="range" id="vol-chord" min="0" max="100" value="60">
+        </label>
+      </div>
+      <div class="sound-block">
+        <h3>🎸 ベース</h3>
+        <label>音色
+          <select id="bass-inst"></select>
+        </label>
+        <label>パターン
+          <select id="bass-pattern"></select>
+        </label>
+        <label>音量
+          <input type="range" id="vol-bass" min="0" max="100" value="75">
+        </label>
+      </div>
+      <div class="sound-block">
+        <h3>🥁 ドラム</h3>
+        <label>パターン
+          <select id="drum-pattern"></select>
+        </label>
+        <label>音量
+          <input type="range" id="vol-drums" min="0" max="100" value="70">
+        </label>
+      </div>
+      <div class="sound-block">
+        <h3>✨ 空間とノリ</h3>
+        <label>リバーブ(響き)
+          <input type="range" id="reverb-slider" min="0" max="100" value="25">
+        </label>
+        <label>スウィング(はねるノリ)
+          <input type="range" id="swing-slider" min="0" max="100" value="0">
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 5: 再生・保存 -->
   <section class="panel transport" id="panel-play">
-    <h2><span class="step-num">4</span> 再生する</h2>
+    <h2><span class="step-num">5</span> 再生・保存する</h2>
     <div class="controls-row">
       <button id="btn-play" class="btn primary">▶ 再生</button>
       <label class="loop-label"><input type="checkbox" id="loop-check" checked> ループ再生</label>
       <button id="btn-midi" class="btn secondary">💾 MIDIで保存</button>
+      <button id="btn-wav" class="btn secondary">🎧 WAVで保存</button>
+      <button id="btn-share" class="btn secondary">🔗 共有リンクをコピー</button>
     </div>
+    <p id="share-status" class="hint share-status"></p>
   </section>
 </main>
 
