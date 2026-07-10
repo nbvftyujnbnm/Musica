@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Musica — コードとメロディーで作曲</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>🎵 Musica</h1>
+  <p class="tagline">コード進行とメロディーを選ぶだけで曲ができる作曲ツール</p>
+</header>
+
+<main>
+  <!-- STEP 1: キーとテンポ -->
+  <section class="panel" id="panel-key">
+    <h2><span class="step-num">1</span> キーとテンポ</h2>
+    <div class="controls-row">
+      <label>キー
+        <select id="key-select"></select>
+      </label>
+      <label>スケール
+        <select id="scale-select">
+          <option value="major">メジャー(明るい)</option>
+          <option value="minor">マイナー(切ない)</option>
+        </select>
+      </label>
+      <label>小節数
+        <select id="bars-select">
+          <option value="4">4小節</option>
+          <option value="8">8小節</option>
+        </select>
+      </label>
+      <label class="tempo-label">テンポ <span id="tempo-value">120</span> BPM
+        <input type="range" id="tempo-slider" min="60" max="180" value="120">
+      </label>
+    </div>
+  </section>
+
+  <!-- STEP 2: コード進行 -->
+  <section class="panel" id="panel-chords">
+    <h2><span class="step-num">2</span> コード進行を選ぶ</h2>
+    <p class="hint">プリセットをタップするか、下の小節をクリックして1つずつ選べます。</p>
+    <div id="preset-list" class="preset-list"></div>
+    <div id="chord-bar-row" class="chord-bar-row"></div>
+    <div id="chord-picker" class="chord-picker hidden">
+      <p class="picker-title">小節 <span id="picker-bar-num"></span> のコードを選択</p>
+      <div id="picker-triads" class="picker-row"></div>
+      <div id="picker-sevenths" class="picker-row"></div>
+    </div>
+  </section>
+
+  <!-- STEP 3: メロディー -->
+  <section class="panel" id="panel-melody">
+    <h2><span class="step-num">3</span> メロディーを描く</h2>
+    <p class="hint">マスをクリック/ドラッグで音を置けます。<span class="chord-tone-hint">色付きのマス</span>はコードに合う音なので、そこを選ぶと自然に響きます。同じ高さで隣り合わせると長い音になります。</p>
+    <div class="melody-actions">
+      <button id="btn-random" class="btn secondary">🎲 おまかせ生成</button>
+      <button id="btn-clear" class="btn secondary">🗑 メロディーをクリア</button>
+    </div>
+    <div class="grid-scroll">
+      <div id="melody-grid" class="melody-grid"></div>
+    </div>
+  </section>
+
+  <!-- STEP 4: 再生 -->
+  <section class="panel transport" id="panel-play">
+    <h2><span class="step-num">4</span> 再生する</h2>
+    <div class="controls-row">
+      <button id="btn-play" class="btn primary">▶ 再生</button>
+      <label class="loop-label"><input type="checkbox" id="loop-check" checked> ループ再生</label>
+      <button id="btn-midi" class="btn secondary">💾 MIDIで保存</button>
+    </div>
+  </section>
+</main>
+
+<footer class="app-footer">
+  <p>音が出ない場合は一度画面をクリックしてから再生してください。作品は自動保存されます。</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
