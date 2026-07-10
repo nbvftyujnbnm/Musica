@@ -99,11 +99,14 @@ const INSTRUMENTS = {
   bass:    { label: "シンセベース",       layers: [{ type: "sawtooth" }], env: [0.006, 0.08, 0.8, 0.1], filter: 900 },
   subbass: { label: "サブベース(丸い)",   layers: [{ type: "sine" }], env: [0.01, 0.1, 0.85, 0.12] },
   pluck:   { label: "プラック",           layers: [{ type: "triangle" }], env: [0.003, 0.16, 0.0, 0.1], filter: 2400 },
+  gtrClean:{ label: "エレキギター(クリーン)", layers: [{ type: "sawtooth", gain: 0.5 }, { type: "triangle", gain: 0.6 }], env: [0.005, 0.28, 0.35, 0.16], filter: 2600, drive: 8, outGain: 0.9 },
+  gtrDrive:{ label: "エレキギター(歪み)",   layers: [{ type: "sawtooth", gain: 0.7 }, { type: "sawtooth", gain: 0.6, detune: 7 }], env: [0.006, 0.3, 0.7, 0.2], filter: 2000, drive: 60, outGain: 0.5 },
+  fingbass:{ label: "エレキベース(指弾き)", layers: [{ type: "triangle", gain: 1 }, { type: "sine", gain: 0.6 }], env: [0.006, 0.14, 0.5, 0.12], filter: 1400 },
 };
 
-const MELODY_INSTRUMENTS = ["soft", "lead", "chip", "piano", "epiano", "pluck"];
-const CHORD_INSTRUMENTS   = ["strings", "epiano", "organ", "piano", "lead", "soft"];
-const BASS_INSTRUMENTS    = ["bass", "subbass", "pluck", "chip"];
+const MELODY_INSTRUMENTS = ["soft", "lead", "chip", "piano", "epiano", "pluck", "gtrClean", "gtrDrive"];
+const CHORD_INSTRUMENTS   = ["strings", "epiano", "organ", "piano", "gtrClean", "gtrDrive", "lead", "soft"];
+const BASS_INSTRUMENTS    = ["bass", "fingbass", "subbass", "pluck", "chip"];
 
 const CHORD_STYLES = {
   pad:    "パッド(伸ばす)",
@@ -131,6 +134,22 @@ const DRUM_PATTERNS = {
   bossa:   "ボサノバ風",
 };
 
+// バンド編成プリセット(各パートの音色・スタイル・空間をまとめて設定)
+const BAND_PRESETS = [
+  { name: "🎸 ロックバンド", desc: "歪みギター×パワフルなドラム",
+    set: { melInst: "gtrDrive", chordInst: "gtrDrive", bassInst: "fingbass", chordStyle: "stroke8", bassPattern: "octave", drumPattern: "rock8", reverb: 16, swing: 0, harmony: false, volMelody: 80, volChord: 55, volBass: 78, volDrums: 82 } },
+  { name: "🎹 ポップスバンド", desc: "ピアノとエレピの王道",
+    set: { melInst: "piano", chordInst: "epiano", bassInst: "fingbass", chordStyle: "stroke8", bassPattern: "root5", drumPattern: "rock8", reverb: 26, swing: 0, harmony: true, volMelody: 82, volChord: 58, volBass: 72, volDrums: 68 } },
+  { name: "🌆 シティポップ", desc: "エレピと歩くベース",
+    set: { melInst: "epiano", chordInst: "epiano", bassInst: "fingbass", chordStyle: "arpUp", bassPattern: "walk", drumPattern: "four", reverb: 32, swing: 16, harmony: true, volMelody: 78, volChord: 60, volBass: 74, volDrums: 62 } },
+  { name: "🕯 バラード", desc: "ストリングスで壮大に",
+    set: { melInst: "piano", chordInst: "strings", bassInst: "subbass", chordStyle: "pad", bassPattern: "whole", drumPattern: "half", reverb: 48, swing: 0, harmony: true, volMelody: 84, volChord: 55, volBass: 68, volDrums: 55 } },
+  { name: "🎮 チップチューン", desc: "ファミコン風8bit",
+    set: { melInst: "chip", chordInst: "chip", bassInst: "chip", chordStyle: "arpUp", bassPattern: "octave", drumPattern: "rock8", reverb: 6, swing: 0, harmony: false, volMelody: 82, volChord: 50, volBass: 70, volDrums: 60 } },
+  { name: "🎷 ジャズ/ラウンジ", desc: "はねるスウィング",
+    set: { melInst: "piano", chordInst: "epiano", bassInst: "subbass", chordStyle: "stroke4", bassPattern: "walk", drumPattern: "shuffle", reverb: 30, swing: 42, harmony: false, volMelody: 80, volChord: 55, volBass: 70, volDrums: 55 } },
+];
+
 /* ---------------- アプリの状態 ---------------- */
 
 const state = {
@@ -156,6 +175,7 @@ const state = {
   volChord: 60,
   volBass: 75,
   volDrums: 70,
+  activeBand: -1,
 };
 
 /* ---------------- 派生値の計算 ---------------- */
@@ -217,6 +237,7 @@ const barsSelect = $("bars-select");
 const tempoSlider = $("tempo-slider");
 const tempoValue = $("tempo-value");
 const presetList = $("preset-list");
+const bandPresetList = $("band-preset-list");
 const chordBarRow = $("chord-bar-row");
 const chordPicker = $("chord-picker");
 const pickerBarNum = $("picker-bar-num");
@@ -290,6 +311,34 @@ function buildPresets() {
     btn.addEventListener("click", () => applyPreset(i));
     presetList.appendChild(btn);
   });
+}
+
+function buildBandPresets() {
+  bandPresetList.innerHTML = "";
+  BAND_PRESETS.forEach((p, i) => {
+    const btn = document.createElement("button");
+    btn.className = "preset-chip" + (i === state.activeBand ? " active" : "");
+    btn.innerHTML = `${p.name}<span class="preset-desc">${p.desc}</span>`;
+    btn.addEventListener("click", () => applyBandPreset(i));
+    bandPresetList.appendChild(btn);
+  });
+}
+
+function applyBandPreset(i) {
+  Object.assign(state, BAND_PRESETS[i].set);
+  state.activeBand = i;
+  buildSoundSelects();
+  buildBandPresets();
+  saveState();
+  if (playing) startPlayback(); // 再生中なら新しい音で鳴らし直す
+}
+
+// 音色などを手動で変えたらバンドプリセットの選択表示を解除
+function clearActiveBand() {
+  if (state.activeBand !== -1) {
+    state.activeBand = -1;
+    buildBandPresets();
+  }
 }
 
 function applyPreset(i) {
@@ -588,28 +637,52 @@ function makeGraph(ctx, reverbAmount) {
   return bus;
 }
 
-// 1音を鳴らす
+// ディストーション用の波形整形カーブ(amountごとにキャッシュ)
+const _distCurves = {};
+function distCurve(amount) {
+  if (_distCurves[amount]) return _distCurves[amount];
+  const n = 2048;
+  const curve = new Float32Array(n);
+  const deg = Math.PI / 180;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+  }
+  _distCurves[amount] = curve;
+  return curve;
+}
+
+// 1音を鳴らす。信号経路: オシレーター → [歪み] → [ローパス] → アンプ(ADSR) → バス
 function playNote(ctx, bus, { inst, midi, time, dur, gain }) {
   const def = INSTRUMENTS[inst] || INSTRUMENTS.soft;
   const [a, d, s, r] = def.env;
+  const g = gain * (def.outGain || 1);
+
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
-  env.gain.linearRampToValueAtTime(gain, time + a);
-  const susLevel = Math.max(0.0001, gain * s);
+  env.gain.linearRampToValueAtTime(g, time + a);
+  const susLevel = Math.max(0.0001, g * s);
   env.gain.linearRampToValueAtTime(susLevel, time + a + d);
   const relStart = Math.max(time + a + d, time + dur);
   env.gain.setValueAtTime(Math.max(0.0001, env.gain.value || susLevel), relStart);
   env.gain.setTargetAtTime(0.0001, relStart, r / 3 + 0.01);
+  env.connect(bus);
 
-  let dest = env;
+  let node = env;
   if (def.filter) {
     const f = ctx.createBiquadFilter();
     f.type = "lowpass";
     f.frequency.value = def.filter;
-    f.connect(env);
-    dest = f;
+    f.connect(node);
+    node = f;
   }
-  env.connect(bus);
+  if (def.drive) {
+    const sh = ctx.createWaveShaper();
+    sh.curve = distCurve(def.drive);
+    sh.oversample = "2x";
+    sh.connect(node);
+    node = sh;
+  }
 
   const freq = midiToFreq(midi);
   const stopAt = time + dur + r + 0.05;
@@ -622,7 +695,7 @@ function playNote(ctx, bus, { inst, midi, time, dur, gain }) {
     const lg = ctx.createGain();
     lg.gain.value = layer.gain === undefined ? 1 : layer.gain;
     osc.connect(lg);
-    lg.connect(dest);
+    lg.connect(node);
     osc.start(time);
     osc.stop(stopAt);
     oscs.push(osc);
@@ -631,20 +704,26 @@ function playNote(ctx, bus, { inst, midi, time, dur, gain }) {
 }
 
 // ドラム(ノイズ/サイン)
-function drumHit(ctx, bus, type, time, gain) {
-  if (type === "kick") {
+function drumHit(ctx, bus, type, time, gain, opts = {}) {
+  // ピッチ系(kick / tom)
+  if (type === "kick" || type === "tom") {
+    const isKick = type === "kick";
+    const startF = opts.freq || (isKick ? 150 : 220);
+    const endF = isKick ? 48 : startF * 0.6;
+    const dur = isKick ? 0.2 : 0.28;
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
-    osc.frequency.setValueAtTime(150, time);
-    osc.frequency.exponentialRampToValueAtTime(48, time + 0.12);
+    osc.frequency.setValueAtTime(startF, time);
+    osc.frequency.exponentialRampToValueAtTime(endF, time + dur * 0.7);
     g.gain.setValueAtTime(gain, time);
-    g.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.001, time + dur);
     osc.connect(g); g.connect(bus);
-    osc.start(time); osc.stop(time + 0.2);
+    osc.start(time); osc.stop(time + dur + 0.02);
     return;
   }
-  // ノイズ系(snare/hat)
-  const dur = type === "snare" ? 0.18 : 0.05;
+  // ノイズ系(snare / hat / openhat / crash)
+  const durMap = { snare: 0.18, hat: 0.05, openhat: 0.3, crash: 0.9 };
+  const dur = durMap[type] || 0.05;
   const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
   const data = buf.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -652,7 +731,7 @@ function drumHit(ctx, bus, type, time, gain) {
   src.buffer = buf;
   const filt = ctx.createBiquadFilter();
   filt.type = "highpass";
-  filt.frequency.value = type === "snare" ? 1200 : 7000;
+  filt.frequency.value = type === "snare" ? 1200 : (type === "crash" ? 3500 : 7000);
   const g = ctx.createGain();
   g.gain.setValueAtTime(gain, time);
   g.gain.exponentialRampToValueAtTime(0.001, time + dur);
@@ -688,10 +767,10 @@ function swungOffset(stepInBar, stepDur) {
 
 // ドラムパターン: [step(0-7)] -> 楽器
 const DRUM_MAPS = {
-  rock8:   { kick: [0, 4], snare: [2, 6], hat: [0, 1, 2, 3, 4, 5, 6, 7] },
-  four:    { kick: [0, 2, 4, 6], snare: [2, 6], hat: [1, 3, 5, 7] },
+  rock8:   { kick: [0, 4], snare: [2, 6], hat: [0, 1, 2, 3, 4, 5, 6, 7], open: [7] },
+  four:    { kick: [0, 2, 4, 6], snare: [2, 6], hat: [1, 3, 5, 7], open: [1, 3, 5, 7] },
   half:    { kick: [0], snare: [4], hat: [0, 2, 4, 6] },
-  shuffle: { kick: [0, 4], snare: [2, 6], hat: [0, 1, 3, 4, 5, 7] },
+  shuffle: { kick: [0, 4], snare: [2, 6], hat: [0, 1, 3, 4, 5, 7], open: [5] },
   bossa:   { kick: [0, 3, 4, 7], snare: [2, 6], hat: [0, 1, 2, 3, 4, 5, 6, 7] },
 };
 
@@ -769,9 +848,29 @@ function scheduleSong(ctx, bus, startTime) {
     // --- ドラム ---
     if (vDrm > 0 && state.drumPattern !== "none") {
       const map = DRUM_MAPS[state.drumPattern] || DRUM_MAPS.rock8;
-      for (const step of map.kick)  drumHit(ctx, bus, "kick",  t + step * stepDur + swungOffset(step, stepDur), 0.9 * vDrm);
-      for (const step of map.snare) drumHit(ctx, bus, "snare", t + step * stepDur + swungOffset(step, stepDur), 0.5 * vDrm);
-      for (const step of map.hat)   drumHit(ctx, bus, "hat",   t + step * stepDur + swungOffset(step, stepDur), 0.28 * vDrm);
+      // フィル(タム回し)を入れる小節: 4小節ごとの最後 or 曲の最終小節
+      const isFill = (bar % 4 === 3) || bar === state.chords.length - 1;
+      for (const step of map.kick)
+        drumHit(ctx, bus, "kick", t + step * stepDur + swungOffset(step, stepDur), 0.9 * vDrm);
+      for (const step of map.snare) {
+        if (isFill && step >= 6) continue; // フィルに置き換え
+        drumHit(ctx, bus, "snare", t + step * stepDur + swungOffset(step, stepDur), 0.5 * vDrm);
+      }
+      for (const step of map.hat) {
+        if (isFill && step >= 6) continue;
+        const t2 = t + step * stepDur + swungOffset(step, stepDur);
+        // 各拍のアタマはオープンハット気味にしてノリを出す
+        drumHit(ctx, bus, (map.open && map.open.includes(step)) ? "openhat" : "hat", t2, 0.26 * vDrm);
+      }
+      // 小節アタマのクラッシュ(4小節ごと)
+      if (bar % 4 === 0) drumHit(ctx, bus, "crash", t, 0.5 * vDrm);
+      // フィル: タム3連の下降
+      if (isFill) {
+        drumHit(ctx, bus, "snare", t + 6 * stepDur, 0.45 * vDrm);
+        drumHit(ctx, bus, "tom", t + 6.5 * stepDur, 0.5 * vDrm, { freq: 260 });
+        drumHit(ctx, bus, "tom", t + 7 * stepDur, 0.5 * vDrm, { freq: 200 });
+        drumHit(ctx, bus, "tom", t + 7.5 * stepDur, 0.5 * vDrm, { freq: 150 });
+      }
     }
   });
 
@@ -1054,6 +1153,7 @@ function snapshot() {
     chordStyle: state.chordStyle, bassPattern: state.bassPattern, drumPattern: state.drumPattern,
     harmony: state.harmony, reverb: state.reverb, swing: state.swing,
     volMelody: state.volMelody, volChord: state.volChord, volBass: state.volBass, volDrums: state.volDrums,
+    activeBand: state.activeBand,
   };
 }
 
@@ -1119,6 +1219,7 @@ function applySnapshot(data) {
   state.volChord = has(data, "volChord", 60);
   state.volBass = has(data, "volBass", 75);
   state.volDrums = has(data, "volDrums", 70);
+  state.activeBand = has(data, "activeBand", -1);
   return true;
 }
 
@@ -1221,20 +1322,20 @@ btnMidi.addEventListener("click", exportMidi);
 btnWav.addEventListener("click", exportWav);
 btnShare.addEventListener("click", shareLink);
 
-// サウンド設定
-melInstSel.addEventListener("change", () => { state.melInst = melInstSel.value; saveState(); });
-chordInstSel.addEventListener("change", () => { state.chordInst = chordInstSel.value; saveState(); });
-bassInstSel.addEventListener("change", () => { state.bassInst = bassInstSel.value; saveState(); });
-chordStyleSel.addEventListener("change", () => { state.chordStyle = chordStyleSel.value; saveState(); });
-bassPatternSel.addEventListener("change", () => { state.bassPattern = bassPatternSel.value; saveState(); });
-drumPatternSel.addEventListener("change", () => { state.drumPattern = drumPatternSel.value; saveState(); });
-harmonyCheck.addEventListener("change", () => { state.harmony = harmonyCheck.checked; saveState(); });
-reverbSlider.addEventListener("input", () => { state.reverb = Number(reverbSlider.value); saveState(); });
-swingSlider.addEventListener("input", () => { state.swing = Number(swingSlider.value); saveState(); });
-volMelody.addEventListener("input", () => { state.volMelody = Number(volMelody.value); saveState(); });
-volChord.addEventListener("input", () => { state.volChord = Number(volChord.value); saveState(); });
-volBass.addEventListener("input", () => { state.volBass = Number(volBass.value); saveState(); });
-volDrums.addEventListener("input", () => { state.volDrums = Number(volDrums.value); saveState(); });
+// サウンド設定(手動変更でバンドプリセットの選択を解除)
+melInstSel.addEventListener("change", () => { state.melInst = melInstSel.value; clearActiveBand(); saveState(); });
+chordInstSel.addEventListener("change", () => { state.chordInst = chordInstSel.value; clearActiveBand(); saveState(); });
+bassInstSel.addEventListener("change", () => { state.bassInst = bassInstSel.value; clearActiveBand(); saveState(); });
+chordStyleSel.addEventListener("change", () => { state.chordStyle = chordStyleSel.value; clearActiveBand(); saveState(); });
+bassPatternSel.addEventListener("change", () => { state.bassPattern = bassPatternSel.value; clearActiveBand(); saveState(); });
+drumPatternSel.addEventListener("change", () => { state.drumPattern = drumPatternSel.value; clearActiveBand(); saveState(); });
+harmonyCheck.addEventListener("change", () => { state.harmony = harmonyCheck.checked; clearActiveBand(); saveState(); });
+reverbSlider.addEventListener("input", () => { state.reverb = Number(reverbSlider.value); clearActiveBand(); saveState(); });
+swingSlider.addEventListener("input", () => { state.swing = Number(swingSlider.value); clearActiveBand(); saveState(); });
+volMelody.addEventListener("input", () => { state.volMelody = Number(volMelody.value); clearActiveBand(); saveState(); });
+volChord.addEventListener("input", () => { state.volChord = Number(volChord.value); clearActiveBand(); saveState(); });
+volBass.addEventListener("input", () => { state.volBass = Number(volBass.value); clearActiveBand(); saveState(); });
+volDrums.addEventListener("input", () => { state.volDrums = Number(volDrums.value); clearActiveBand(); saveState(); });
 
 document.addEventListener("keydown", e => {
   if (e.code === "Space" && !["SELECT", "INPUT", "BUTTON", "TEXTAREA"].includes(document.activeElement.tagName)) {
@@ -1250,6 +1351,7 @@ buildKeySelect();
 const fromHash = tryLoadFromHash();
 const restored = fromHash || loadState();
 buildPresets();
+buildBandPresets();
 buildSoundSelects();
 keySelect.value = state.keyRoot;
 scaleSelect.value = state.scale;

@@ -309,6 +309,7 @@ select {
 .grid-cell.note-on.play-col { filter: brightness(1.3); }
 
 /* ---- sound customization ---- */
+.band-preset-list { margin-bottom: 14px; }
 .sound-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
